@@ -41,6 +41,7 @@ async function run(){
 
         const userCollection = client.db('furnishbay').collection('users');
         const categoryCollection = client.db('furnishbay').collection('categories');
+        const productCollection = client.db('furnishbay').collection('products');
 
         //Get JWT
         app.get('/jwt', async(req, res)=>{
@@ -70,6 +71,13 @@ async function run(){
         app.get('/categories', async(req, res)=> {
             const query = {}
             const result = await categoryCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        //Post Products
+        app.post('/products', async(req, res)=> {
+            const product = req.body;
+            const result = await productCollection.insertOne(product);
             res.send(result);
         })
 
