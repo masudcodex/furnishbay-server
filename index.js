@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -74,10 +74,25 @@ async function run(){
             res.send(result);
         })
 
-        //Post Products
+        //Post Products by seller
         app.post('/products', async(req, res)=> {
             const product = req.body;
             const result = await productCollection.insertOne(product);
+            res.send(result);
+        })
+        
+        //Get Products
+        app.get('/products', async(req, res)=> {
+            const query = {}
+            const products = await productCollection.find(query).toArray();
+            res.send(products);
+        })
+
+        //Get Products by Category id
+        app.get('/categories/:id', async(req, res)=> {
+            const id = req.params.id;
+            const query = {category_id: id}
+            const result = await productCollection.find(query).toArray()
             res.send(result);
         })
 
