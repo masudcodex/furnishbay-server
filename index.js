@@ -40,6 +40,7 @@ async function run(){
     try{
 
         const userCollection = client.db('furnishbay').collection('users');
+        const categoryCollection = client.db('furnishbay').collection('categories');
 
         //Get JWT
         app.get('/jwt', async(req, res)=>{
@@ -53,7 +54,7 @@ async function run(){
             res.status(403).send({accessToken: ''})
         })
 
-
+        //Save User to database when signup
         app.post('/users', async(req, res)=> {
             const user = req.body;
             const query = {email: user.email}
@@ -62,6 +63,13 @@ async function run(){
                 return
             }
             const result = await userCollection.insertOne(user);
+            res.send(result);
+        })
+
+        //Get Categories
+        app.get('/categories', async(req, res)=> {
+            const query = {}
+            const result = await categoryCollection.find(query).toArray();
             res.send(result);
         })
 
