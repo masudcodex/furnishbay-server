@@ -6,6 +6,8 @@ require('dotenv').config();
 const port = process.env.PORT || 5000;
 
 const app = express();
+
+
 //Middleware
 app.use(cors());
 app.use(express.json());
@@ -15,7 +17,7 @@ app.get('/', (req, res)=> {
 })
 
 //verifyJWT setup
-function verifyJwt(req, res, next){
+const verifyJwt = (req, res, next)=>{
             
     const authHeader = req.headers.authorization;
     if (!authHeader) {
@@ -31,6 +33,29 @@ function verifyJwt(req, res, next){
     })
 }
 
+//Verify Admin 
+
+    const verifyAdmin = async(req, res, next) => {
+        const email = req.decoded.email;
+        const query = {email: email};
+        const user = await usersCollection.findOne(query);
+        if(user?.role !== 'admin'){
+            res.status(403).send({message: 'Access forbidden'})
+        }
+        next();
+    }
+
+//Verify User
+
+    const verifyUser = async(req, res, next) => {
+        const email = req.decoded.email;
+        const query = {email: email};
+        const user = await usersCollection.findOne(query);
+        if(user?.role !== 'user'){
+            res.status(403).send({message: 'Access forbidden'})
+        }
+        next();
+    }
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.f75ntdx.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
@@ -65,6 +90,30 @@ async function run(){
             }
             const result = await userCollection.insertOne(user);
             res.send(result);
+        })
+
+        //Get admin
+        app.get('/users/admin/:email', async(req, res)=> {
+            const email = req.params.email;
+            const query = {email};
+            const result = await userCollection.findOne(query);
+            res.send({isAdmin: result?.role === 'admin'})
+        })
+
+        //Get seller
+        app.get('/users/seller/:email', async(req, res)=> {
+            const email = req.params.email;
+            const query = {email};
+            const result = await userCollection.findOne(query);
+            res.send({isSeller: result?.role === 'seller'})
+        })
+
+        //Get user
+        app.get('/users/user/:email', async(req, res)=> {
+            const email = req.params.email;
+            const query = {email};
+            const result = await userCollection.findOne(query);
+            res.send({isUser: result?.role === 'user'})
         })
 
         //Get Categories
