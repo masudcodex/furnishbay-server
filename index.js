@@ -48,7 +48,6 @@ async function run(){
         const categoryCollection = client.db('furnishbay').collection('categories');
         const productCollection = client.db('furnishbay').collection('products');
         const bookedProductCollection = client.db('furnishbay').collection('bookedProducts');
-        const featuredProductCollection = client.db('furnishbay').collection('featuredProducts');
 
         //Get JWT
         app.get('/jwt', async(req, res)=>{
@@ -231,6 +230,15 @@ async function run(){
             const query = {isFeatured: true}
             const result = await productCollection.find(query).limit(3).toArray();
             res.send(result);
+        })
+
+        //Get Booked Products by email of user
+        app.get('/user/:email', async(req, res)=> {
+            const email = req.params.email;
+            console.log('email', email);
+            const query = {email: email}
+            const bookedProducts = await bookedProductCollection.find(query).toArray();
+            res.send(bookedProducts);
         })
         
         //Get Products by email of seller
