@@ -2,6 +2,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const { query } = require('express');
 require('dotenv').config();
 const port = process.env.PORT || 5000;
 
@@ -16,11 +17,11 @@ app.get('/', (req, res)=> {
     res.send("Furnishbay Server is running");
 })
 
-//verifyJWT setup
+// verifyJWT setup
 const verifyJwt = (req, res, next)=>{
             
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
+    const authorizationHeader = req.headers.authorization;
+    if (!authorizationHeader) {
         res.status(401).send('Unauthorized access')
     }
     const token = authHeader.split(' ')[1]
@@ -29,33 +30,12 @@ const verifyJwt = (req, res, next)=>{
             return res.status(403).send({message: 'Access forbidden'})
         }
         req.decoded = decoded;
+        console.log(req.decoded);
         next();
     })
 }
 
-//Verify Admin 
 
-    const verifyAdmin = async(req, res, next) => {
-        const email = req.decoded.email;
-        const query = {email: email};
-        const user = await usersCollection.findOne(query);
-        if(user?.role !== 'admin'){
-            res.status(403).send({message: 'Access forbidden'})
-        }
-        next();
-    }
-
-//Verify User
-
-    const verifyUser = async(req, res, next) => {
-        const email = req.decoded.email;
-        const query = {email: email};
-        const user = await usersCollection.findOne(query);
-        if(user?.role !== 'user'){
-            res.status(403).send({message: 'Access forbidden'})
-        }
-        next();
-    }
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.f75ntdx.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
@@ -67,6 +47,7 @@ async function run(){
         const userCollection = client.db('furnishbay').collection('users');
         const categoryCollection = client.db('furnishbay').collection('categories');
         const productCollection = client.db('furnishbay').collection('products');
+        const bookedProductCollection = client.db('furnishbay').collection('bookedProducts');
 
         //Get JWT
         app.get('/jwt', async(req, res)=>{
@@ -74,11 +55,49 @@ async function run(){
             const query = {email: email};
             const user = await userCollection.findOne(query);
             if(user){
-                const token = jwt.sign({email}, process.env.JWT_TOKEN, {expiresIn: '2d'})
+                const token = jwt.sign({email}, process.env.ACCESS_TOKEN, {expiresIn: '1d'})
                 return res.send({accessToken: token})
             }
             res.status(403).send({accessToken: ''})
         })
+
+        //Verify Admin 
+
+        const verifyAdmin = async(req, res, next) => {
+            const email = req.decoded.email;
+            const query = {email: email};
+            const user = await userCollection.findOne(query);
+            if(user?.role !== 'admin'){
+                res.status(403).send({message: 'Access forbidden'})
+            }
+            next();
+        }
+
+
+        //Verify Seller
+
+        const verifySeller = async(req, res, next) => {
+            const email = req.decoded.email;
+            const query = {email: email};
+            const user = await userCollection.findOne(query);
+            if(user?.role !== 'seller'){
+                res.status(403).send({message: 'Access forbidden'})
+            }
+            next();
+        }
+
+        //Verify User
+
+        const verifyUser = async(req, res, next) => {
+            const email = req.decoded;
+            console.log(email);
+            const query = {email: email};
+            const user = await userCollection.findOne(query);
+            if(user?.role !== 'user'){
+                res.status(403).send({message: 'Access forbidden'})
+            }
+            next();
+        }
 
         //Save User to database when signup
         app.post('/users', async(req, res)=> {
@@ -92,7 +111,43 @@ async function run(){
             res.send(result);
         })
 
-        //Get admin
+        //Get All users from user role
+        app.get('/users', async(req, res)=> {
+            const query = {role: 'user'}
+            const result = await userCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        //Get All users from seller role
+        app.get('/sellers', async(req, res)=> {
+            const query = {role: 'seller'}
+            const result = await userCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        //Update Verify Status for sellers
+        app.put('/sellers/:id', async(req, res)=> {
+            const id = req.params.id;
+            const query = {_id: ObjectId(id)}
+            const options = {upsert: true};
+            const updatedDoc = {
+                $set: {
+                    isVerified: true
+                }
+            }
+            const result = await userCollection.updateOne(query, updatedDoc, options);
+            res.send(result);
+        })
+
+        //Delete seller from database
+        app.delete('/sellers/:id', async(req, res)=> {
+            const id = req.params.id;
+            const query = {_id: ObjectId(id)}
+            const result = await userCollection.deleteOne(query);
+            res.send(result);
+        })
+
+        //Get Admin by email for Admin private route
         app.get('/users/admin/:email', async(req, res)=> {
             const email = req.params.email;
             const query = {email};
@@ -100,7 +155,8 @@ async function run(){
             res.send({isAdmin: result?.role === 'admin'})
         })
 
-        //Get seller
+
+        //Get seller by email for seller private route
         app.get('/users/seller/:email', async(req, res)=> {
             const email = req.params.email;
             const query = {email};
@@ -108,7 +164,7 @@ async function run(){
             res.send({isSeller: result?.role === 'seller'})
         })
 
-        //Get user
+        //Get user by email for user private route
         app.get('/users/user/:email', async(req, res)=> {
             const email = req.params.email;
             const query = {email};
@@ -128,6 +184,23 @@ async function run(){
             const product = req.body;
             const result = await productCollection.insertOne(product);
             res.send(result);
+        })
+
+        //Post Booked products and update product status by buyer
+        app.post('/booked', async(req, res)=> {
+            const bookedProduct = req.body;
+            console.log(bookedProduct);
+            const id = bookedProduct.id;
+            const filter = {_id: ObjectId(id)}
+            const options = { upsert: true };
+            const updatedDoc = {
+                $set: {
+                    status: 'booked'
+                }
+            }
+            const updatedProduct = await productCollection.updateOne(filter, updatedDoc, options);
+            const result = await bookedProductCollection.insertOne(bookedProduct);
+            res.send(result)
         })
         
         //Get Products
