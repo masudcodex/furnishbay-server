@@ -24,8 +24,8 @@ const verifyJwt = (req, res, next)=>{
     if (!authorizationHeader) {
         res.status(401).send('Unauthorized access')
     }
-    const token = authHeader.split(' ')[1]
-    jwt.verify(token, process.env.JWT_TOKEN, function(err, decoded){
+    const token = authorizationHeader.split(' ')[1]
+    jwt.verify(token, process.env.ACCESS_TOKEN, function(err, decoded){
         if (err) {
             return res.status(403).send({message: 'Access forbidden'})
         }
@@ -48,6 +48,7 @@ async function run(){
         const categoryCollection = client.db('furnishbay').collection('categories');
         const productCollection = client.db('furnishbay').collection('products');
         const bookedProductCollection = client.db('furnishbay').collection('bookedProducts');
+        const featuredProductCollection = client.db('furnishbay').collection('featuredProducts');
 
         //Get JWT
         app.get('/jwt', async(req, res)=>{
@@ -180,9 +181,31 @@ async function run(){
         })
 
         //Post Products by seller
-        app.post('/products', async(req, res)=> {
+        app.post('/products', verifyJwt, verifySeller, async(req, res)=> {
             const product = req.body;
             const result = await productCollection.insertOne(product);
+            res.send(result);
+        })
+
+        //Update Products as featured by seller
+        app.put('/products/:id', verifyJwt, verifySeller, async(req, res)=> {
+            const id = req.params.id;
+            const query = {_id: ObjectId(id)}
+            const options = {upsert: true};
+            const updatedDoc = {
+                $set: {
+                    isFeatured: true
+                }
+            }
+            const result = await productCollection.updateOne(query, updatedDoc, options);
+            res.send(result);
+        })
+
+        //Delete Product by Seller
+        app.delete('/products/:id', verifyJwt, verifySeller, async(req, res)=> {
+            const id = req.params.id;
+            const query = {_id: ObjectId(id)}
+            const result = await productCollection.deleteOne(query);
             res.send(result);
         })
 
@@ -202,10 +225,19 @@ async function run(){
             const result = await bookedProductCollection.insertOne(bookedProduct);
             res.send(result)
         })
-        
-        //Get Products
+
+        //Get products by IsFeatured:true filter
         app.get('/products', async(req, res)=> {
-            const query = {}
+            const query = {isFeatured: true}
+            const result = await productCollection.find(query).limit(3).toArray();
+            res.send(result);
+        })
+        
+        //Get Products by email of seller
+        app.get('/seller/:email',verifyJwt, verifySeller, async(req, res)=> {
+            const email = req.params.email;
+            console.log('email', email);
+            const query = {sellerEmail: email}
             const products = await productCollection.find(query).toArray();
             res.send(products);
         })
