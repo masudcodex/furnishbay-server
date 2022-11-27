@@ -48,6 +48,7 @@ async function run(){
         const categoryCollection = client.db('furnishbay').collection('categories');
         const productCollection = client.db('furnishbay').collection('products');
         const bookedProductCollection = client.db('furnishbay').collection('bookedProducts');
+        const reportedProductCollection = client.db('furnishbay').collection('reportedProducts');
 
         //Get JWT
         app.get('/jwt', async(req, res)=>{
@@ -89,8 +90,8 @@ async function run(){
         //Verify User
 
         const verifyUser = async(req, res, next) => {
-            const email = req.decoded;
-            console.log(email);
+            const email = req.decoded.email;
+            console.log('user email', email);
             const query = {email: email};
             const user = await userCollection.findOne(query);
             if(user?.role !== 'user'){
@@ -233,7 +234,7 @@ async function run(){
         })
 
         //Get Booked Products by email of user
-        app.get('/user/:email', async(req, res)=> {
+        app.get('/user/:email', verifyJwt, async(req, res)=> {
             const email = req.params.email;
             console.log('email', email);
             const query = {email: email}
@@ -255,6 +256,37 @@ async function run(){
             const id = req.params.id;
             const query = {category_id: id}
             const result = await productCollection.find(query).toArray()
+            res.send(result);
+        })
+
+        //Post Reported Products
+        app.post('/reportedproduct', verifyJwt, verifyUser, async(req, res)=> {
+            const product = req.body;
+            const id = product.productId;
+            const query = {productId: id}
+            const isProductExist = await reportedProductCollection.findOne(query);
+            if (isProductExist) {
+                res.send({message: 'Already reported'})
+                return
+            } 
+            const result = await reportedProductCollection.insertOne(product);
+            res.send(result);
+        })
+
+        //Get reported products by admin
+        app.get('/reportedproducts', async(req, res)=> {
+            const query = {}
+            const result = await reportedProductCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        //Delete reported products by admin
+        app.delete('/reportedproducts/:id', async(req, res)=> {
+            const id = req.params.id;
+            const query = {productId: id}
+            const filter = {_id: ObjectId(id)}
+            const result = await reportedProductCollection.deleteOne(query);
+            const deleteProduct = await productCollection.deleteOne(filter);
             res.send(result);
         })
 
