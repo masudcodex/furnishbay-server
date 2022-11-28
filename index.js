@@ -2,9 +2,9 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const { query } = require('express');
 require('dotenv').config();
 const port = process.env.PORT || 5000;
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 
 const app = express();
 
@@ -49,6 +49,43 @@ async function run(){
         const productCollection = client.db('furnishbay').collection('products');
         const bookedProductCollection = client.db('furnishbay').collection('bookedProducts');
         const reportedProductCollection = client.db('furnishbay').collection('reportedProducts');
+        const paymentInfoCollection = client.db('furnishbay').collection('paymentInfo');
+
+        //Payment Stripe
+        app.post('/create-payment-intent', async(req, res)=>{
+            const product = req.body;
+            const price = parseInt(product.price);
+            const amount = price * 100;
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                "payment_method_types": [
+                    "card"
+                ],
+              });
+            
+              res.send({
+                clientSecret: paymentIntent.client_secret,
+              });
+              
+            });
+        //Post payment info to the database
+        app.post('/payment', async(req, res)=> {
+            const payment= req.body;
+            const id = payment.productId;
+            const updatedDoc = {
+                $set: {
+                    status: "paid"
+                }
+            }
+            const query  = {productId: id}
+            const filter = {_id: ObjectId(id)}
+            const updateBooked = await bookedProductCollection.updateOne(query, updatedDoc);
+            const updateProducts = await productCollection.updateOne(filter, updatedDoc);
+            const result = await paymentInfoCollection.insertOne(payment);
+            res.send(result);
+        })
 
         //Get JWT
         app.get('/jwt', async(req, res)=>{
@@ -181,14 +218,14 @@ async function run(){
         })
 
         //Post Products by seller
-        app.post('/products', verifyJwt, verifySeller, async(req, res)=> {
+        app.post('/products', verifyJwt, async(req, res)=> {
             const product = req.body;
             const result = await productCollection.insertOne(product);
             res.send(result);
         })
 
         //Update Products as featured by seller
-        app.put('/products/:id', verifyJwt, verifySeller, async(req, res)=> {
+        app.put('/products/:id', verifyJwt, async(req, res)=> {
             const id = req.params.id;
             const query = {_id: ObjectId(id)}
             const options = {upsert: true};
@@ -202,7 +239,7 @@ async function run(){
         })
 
         //Delete Product by Seller
-        app.delete('/products/:id', verifyJwt, verifySeller, async(req, res)=> {
+        app.delete('/products/:id', verifyJwt, async(req, res)=> {
             const id = req.params.id;
             const query = {_id: ObjectId(id)}
             const result = await productCollection.deleteOne(query);
@@ -226,6 +263,14 @@ async function run(){
             res.send(result)
         })
 
+        //Get Booked Products by id for payment
+        app.get('/products/payment/:id', async(req, res)=> {
+            const id = req.params.id;
+            const query = {_id: ObjectId(id)};
+            const result = await bookedProductCollection.findOne(query);
+            res.send(result);
+        })
+
         //Get products by IsFeatured:true filter
         app.get('/products', async(req, res)=> {
             const query = {isFeatured: true}
@@ -243,7 +288,7 @@ async function run(){
         })
         
         //Get Products by email of seller
-        app.get('/seller/:email',verifyJwt, verifySeller, async(req, res)=> {
+        app.get('/seller/:email',verifyJwt, async(req, res)=> {
             const email = req.params.email;
             console.log('email', email);
             const query = {sellerEmail: email}
@@ -255,7 +300,12 @@ async function run(){
         app.get('/categories/:id', async(req, res)=> {
             const id = req.params.id;
             const query = {category_id: id}
-            const result = await productCollection.find(query).toArray()
+            const result = await productCollection.find({
+                $and: [
+                    {'category_id': id},
+                    {'status': {$in: ['available', 'booked']}},
+                ]
+            }).toArray()
             res.send(result);
         })
 
